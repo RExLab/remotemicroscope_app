@@ -11,153 +11,149 @@
 #include <stdio.h>
 #include <v8.h>
 #include <string.h>
-#define SLEEP_TIME 1000
-
+#define SLEEP_TIME 10000
+#define TIMEOUT 200
 
 using namespace v8;
-static  pthread_t id_thread;
+static pthread_t id_thread;
 static int waitResponse = pdFALSE; // Testas com inicio pdFalse
 static tCommand cmd;
 static u16 regs[120]; // registrador de trabalho para troca de dados com os multimetros
 tControl control;
 
-
 int modbus_Init(void) {
-	//fprintf(flog, "Abrindo UART %s"CMD_TERMINATOR, COM_PORT);
-	#if (LOG_MODBUS == pdON)
-	printf("Abrindo UART %s"CMD_TERMINATOR, COM_PORT);
-	#endif
-	if (uart_Init(COM_PORT, MODBUS_BAUDRATE) == pdFAIL ) {
-   		//fprintf(flog, "Erro ao abrir a porta UART"CMD_TERMINATOR);
-		//fprintf(flog, "    Verifique se essa porta não esteja sendo usada por outro programa,"CMD_TERMINATOR);
-		//fprintf(flog, "    ou se o usuário tem permissão para usar essa porta: chmod a+rw %s"CMD_TERMINATOR, COM_PORT);
-   		#if (LOG_MODBUS == pdON)
-   		printf("Erro ao abrir a porta UART"CMD_TERMINATOR);
-		printf("    Verifique se essa porta não esteja sendo usada por outro programa,"CMD_TERMINATOR);
-		printf("    ou se o usuário tem permissão para usar essa porta: chmod a+rw %s"CMD_TERMINATOR, COM_PORT);
-		#endif
-		return pdFAIL;
-	}
+    //fprintf(flog, "Abrindo UART %s"CMD_TERMINATOR, COM_PORT);
+#if (LOG_MODBUS == pdON)
+    printf("Abrindo UART %s"CMD_TERMINATOR, COM_PORT);
+#endif
+    if (uart_Init(COM_PORT, MODBUS_BAUDRATE) == pdFAIL) {
+        //fprintf(flog, "Erro ao abrir a porta UART"CMD_TERMINATOR);
+        //fprintf(flog, "    Verifique se essa porta nï¿½o esteja sendo usada por outro programa,"CMD_TERMINATOR);
+        //fprintf(flog, "    ou se o usuï¿½rio tem permissï¿½o para usar essa porta: chmod a+rw %s"CMD_TERMINATOR, COM_PORT);
+#if (LOG_MODBUS == pdON)
+        printf("Erro ao abrir a porta UART"CMD_TERMINATOR);
+        printf("    Verifique se essa porta nï¿½o esteja sendo usada por outro programa,"CMD_TERMINATOR);
+        printf("    ou se o usuï¿½rio tem permissï¿½o para usar essa porta: chmod a+rw %s"CMD_TERMINATOR, COM_PORT);
+#endif
+        return pdFAIL;
+    }
 
-	//fprintf(flog, "Port UART %s aberto com sucesso"CMD_TERMINATOR, COM_PORT);
-	#if (LOG_MODBUS == pdON)
-		printf("Port UART %s aberto com sucesso a %d bps"CMD_TERMINATOR, COM_PORT, MODBUS_BAUDRATE);
-	#endif
-	modbus_MasterInit(uart_SendBuffer, uart_GetChar, uart_ClearBufferRx);
-	modbus_MasterAppendTime(now, 3000);
+    //fprintf(flog, "Port UART %s aberto com sucesso"CMD_TERMINATOR, COM_PORT);
+#if (LOG_MODBUS == pdON)
+    printf("Port UART %s aberto com sucesso a %d bps"CMD_TERMINATOR, COM_PORT, MODBUS_BAUDRATE);
+#endif
+    modbus_MasterInit(uart_SendBuffer, uart_GetChar, uart_ClearBufferRx);
+    modbus_MasterAppendTime(now, 3000);
 
-	return pdPASS;
+    return pdPASS;
 }
 
 
 
-// para gravação os valores dos registradores devem estar preenchidos
-// após a leitura os registradores estarão preenchidos
+// para gravaï¿½ï¿½o os valores dos registradores devem estar preenchidos
+// apï¿½s a leitura os registradores estarï¿½o preenchidos
 
-// Envia um comando para o escravo, nesta mesma função é feito o procedimento de erro de envio
+// Envia um comando para o escravo, nesta mesma funï¿½ï¿½o ï¿½ feito o procedimento de erro de envio
 // Uma vez enviado o comando com sucesso caprturar resposta no modbus_Process
 //	BUSY: Ficar na espera da resposta
-//  ERROR: Notificar  o erro e tomar procedimento cabíveis
+//  ERROR: Notificar  o erro e tomar procedimento cabï¿½veis
 //  OK para escrita: Nada, pois os valores dos registradores foram salvos no escravo com sucesso
 //	OK para Leitura: Capturar os valores dos registradores lidos do escravo
 // Parametros
 // c: Tipo de comando para ser enviado ao escravo
-// funcResponse: Ponteiro da função para processar a resposta da comunicação
+// funcResponse: Ponteiro da funï¿½ï¿½o para processar a resposta da comunicaï¿½ï¿½o
 
+void modbus_SendCommand(tCommand c) {
+    if (waitResponse) return;
 
-void modbus_SendCommand( tCommand c) {
-    if (waitResponse) return ;
-
-	cmd = c;
+    cmd = c;
     // APONTA QUAIS REGISTRADORES A ACESSAR NO DISPOSITIVO
     // -----------------------------------------------------------------------------------------------------------------
 
-    // Comando para ler os registradores: modelo, versão firmware e modo de operações dos reles
+    // Comando para ler os registradores: modelo, versï¿½o firmware e modo de operaï¿½ï¿½es dos reles
     tcmd typeCMD = readREGS;
     uint addrInit = 0;
     uint nRegs = 3;
-	u16 value = 0;
+    u16 value = 0;
 
-    // Comando para ler que ação o recurso de hardware está fazendo agora
+    // Comando para ler que aï¿½ï¿½o o recurso de hardware estï¿½ fazendo agora
     if (cmd == cmdGET_ACTION) {
         addrInit = 0x10;
         nRegs = 1;
 
-    // Comando para o status do experimento
+        // Comando para o status do experimento
     } else if (cmd == cmdGET_SLOT) {
         addrInit = 0x11;
         nRegs = 1;
 
-    // Comando para pegar quantas amostras foram tiradas durante experimento. Máixma 600 amostra = 10 minutos de experimento
+        // Comando para pegar quantas amostras foram tiradas durante experimento. Mï¿½ixma 600 amostra = 10 minutos de experimento
     } else if (cmd == cmdGET_SWITCH) {
         addrInit = 0x12;
         nRegs = 1;
 
-    // Comando para ajustar a grandeza da temperatura
+        // Comando para ajustar a grandeza da temperatura
     } else if (cmd == cmdSET_SLOT) {
         typeCMD = writeREG;
         addrInit = 0x13;
         nRegs = 1;
         value = (control.slot)&0xff;
 
-	// Comando para dar início ao experimento
-	} else if (cmd == cmdSET_MOTOR) {
+        // Comando para dar inï¿½cio ao experimento
+    } else if (cmd == cmdSET_MOTOR) {
         typeCMD = writeREG;
         addrInit = 0x14;
         nRegs = 1;
-		//value = control.tempType;
-    // Comando para parar o experimento
-    } 
+        //value = control.tempType;
+        // Comando para parar o experimento
+    }
 
 
-// ENVIA O COMANDO AO DISPOSITIVO ESCRAVO
-   	// -----------------------------------------------------------------------------------------------------------------
-   	int ret;
+    // ENVIA O COMANDO AO DISPOSITIVO ESCRAVO
+    // -----------------------------------------------------------------------------------------------------------------
+    int ret;
     if (typeCMD == writeREG) {
-    	#if (LOG_MODBUS == pdON)
-    	printf("modbus WriteReg [cmd %d] [slave %d] [reg 0x%x] [value 0x%x]"CMD_TERMINATOR, cmd, control.rhID, addrInit, value);
-    	#endif
-		ret =  modbus_MasterWriteRegister(control.rhID, addrInit, value);
-	} else if (typeCMD == writeREGS) {
-	   	#if (LOG_MODBUS == pdON)
-    	printf("modbus WriteRegs [cmd %d] [slave %d] [reg 0x%x] [len %d]"CMD_TERMINATOR, cmd, control.rhID, addrInit, nRegs);
-    	#endif
+#if (LOG_MODBUS == pdON)
+        printf("modbus WriteReg [cmd %d] [slave %d] [reg 0x%x] [value 0x%x]"CMD_TERMINATOR, cmd, control.rhID, addrInit, value);
+#endif
+        ret = modbus_MasterWriteRegister(control.rhID, addrInit, value);
+    } else if (typeCMD == writeREGS) {
+#if (LOG_MODBUS == pdON)
+        printf("modbus WriteRegs [cmd %d] [slave %d] [reg 0x%x] [len %d]"CMD_TERMINATOR, cmd, control.rhID, addrInit, nRegs);
+#endif
         ret = modbus_MasterWriteRegisters(control.rhID, addrInit, nRegs, regs);
     } else {
-    	#if (LOG_MODBUS == pdON)
-    	printf("modbus ReadRegs [cmd %d] [slave %d] [reg 0x%x] [len %d]"CMD_TERMINATOR, cmd, control.rhID, addrInit, nRegs);
-    	#endif
-		ret = modbus_MasterReadRegisters(control.rhID, addrInit, nRegs, regs);
-	}
+#if (LOG_MODBUS == pdON)
+        printf("modbus ReadRegs [cmd %d] [slave %d] [reg 0x%x] [len %d]"CMD_TERMINATOR, cmd, control.rhID, addrInit, nRegs);
+#endif
+        ret = modbus_MasterReadRegisters(control.rhID, addrInit, nRegs, regs);
+    }
 
 
-	// se foi enviado com sucesso ficaremos na espera da resposta do recurso de hardware
-	if (ret == pdPASS) waitResponse = pdTRUE;
-	#if (LOG_MODBUS == pdON)
-	//else fprintf(flog, "modbus err[%d] send querie"CMD_TERMINATOR, modbus_MasterReadStatus());
-	else printf("modbus err[%d] SEND querie"CMD_TERMINATOR, modbus_MasterReadStatus());
-	#endif
+    // se foi enviado com sucesso ficaremos na espera da resposta do recurso de hardware
+    if (ret == pdPASS) waitResponse = pdTRUE;
+#if (LOG_MODBUS == pdON)
+        //else fprintf(flog, "modbus err[%d] send querie"CMD_TERMINATOR, modbus_MasterReadStatus());
+    else printf("modbus err[%d] SEND querie"CMD_TERMINATOR, modbus_MasterReadStatus());
+#endif
 
-	return;
+    return;
 }
 
+void init_control_tad() {
+    control.rhID = 1; // Sinaliza que o endereï¿½o do RH no modbus ï¿½ 1
+    control.getInfo = 0; // sinaliza para pegar as informaï¿½ï¿½es do RH
+    control.action = 0;
+    control.status = 0;
+    control.getSlot = 0;
+    control.setSlot = 0;
+    control.exit = 0;
+    control.slot = 1;
+    waitResponse = pdFALSE;
+    memset(control.rhModel, '\0', __STRINGSIZE__);
+    memset(control.rhFirmware, '\0', __STRINGSIZE__);
 
+    return;
 
-void init_control_tad(){
-	control.rhID = 1;						// Sinaliza que o endereço do RH no modbus é 1
-	control.getInfo = 0; 					// sinaliza para pegar as informações do RH
-	control.action = 0;
-	control.status = 0;
-	control.getSlot =0;
-	control.setSlot =0;
-	control.exit =0;
-    control.slot =1;
-	waitResponse = pdFALSE;
-	memset(control.rhModel, '\0', __STRINGSIZE__);
-	memset(control.rhFirmware, '\0', __STRINGSIZE__);
-
-  return;
-	
 }
 
 // processo do modbus.
@@ -165,165 +161,204 @@ void init_control_tad(){
 //	Atualiza as variaveis do sistema de acordo com a resposta do recurso de hardware.
 
 void * modbus_Process(void * params) {
-	
-	int first = 0;
-	while (control.exit == 0){
-		if(first){
-			usleep(SLEEP_TIME);			
-		}
-	    first =1;
+
+    int first = 0;
+    while (control.exit == 0) {
+        if (first) {
+            usleep(SLEEP_TIME);
+        }
+        first = 1;
         modbus_MasterProcess();
 
-		// Gerenciador de envio de comandos
-		// se não estamos esperando a resposta do SendCommand vamos analisar o próximo comando a ser enviado
-		if (!waitResponse) {
-			// checa se é para pegar as informações do RH
-			if (control.getSlot) {
-				modbus_SendCommand(cmdGET_SLOT);
+        // Gerenciador de envio de comandos
+        // se nï¿½o estamos esperando a resposta do SendCommand vamos analisar o prï¿½ximo comando a ser enviado
+        if (!waitResponse) {
+            // checa se ï¿½ para pegar as informaï¿½ï¿½es do RH
+            if (control.getSlot) {
+                modbus_SendCommand(cmdGET_SLOT);
 
-			}else if (control.setSlot){
-				modbus_SendCommand(cmdSET_SLOT);
-				
-			}
-			continue;
-		}
+            } else if (control.setSlot) {
+                modbus_SendCommand(cmdSET_SLOT);
+
+            }
+            continue;
+        }
 
 
-		int ret = modbus_MasterReadStatus();
-		//	BUSY: Ficar na espera da resposta
-		//  ERROR: Notificar  o erro e tomar procedimento cabíveis
-		//  OK para escrita: Nada, pois os valores dos registradores foram salvos no escravo com sucesso
-		//	OK para Leitura: Capturar os valores dos registradores lidos do escravo
+        int ret = modbus_MasterReadStatus();
+        //	BUSY: Ficar na espera da resposta
+        //  ERROR: Notificar  o erro e tomar procedimento cabï¿½veis
+        //  OK para escrita: Nada, pois os valores dos registradores foram salvos no escravo com sucesso
+        //	OK para Leitura: Capturar os valores dos registradores lidos do escravo
 
-		// se ainda está ocupado não faz nada
+        // se ainda estï¿½ ocupado nï¿½o faz nada
 
-		if (ret == errMODBUS_BUSY)continue;
-		waitResponse = pdFALSE;
-		// se aconteceu algum erro
-		if (ret < 0) {
-			#if (LOG_MODBUS == pdON)
-				printf("modbus err[%d] WAIT response "CMD_TERMINATOR, ret);
-			#endif
-			control.stsCom = modbus_MasterReadException();
-				// modbusILLEGAL_FUNCTION: O multimetro recebeu uma função que não foi implementada ou não foi habilitada.
-				// modbusILLEGAL_DATA_ADDRESS: O multimetro precisou acessar um endereço inexistente.
-				// modbusILLEGAL_DATA_VALUE: O valor contido no campo de dado não é permitido pelo multimetro. Isto indica uma falta de informações na estrutura do campo de dados.
-				// modbusSLAVE_DEVICE_FAILURE: Um irrecuperável erro ocorreu enquanto o multimetro estava tentando executar a ação solicitada.
-			continue;
-		}
+        if (ret == errMODBUS_BUSY)continue;
+        waitResponse = pdFALSE;
+        // se aconteceu algum erro
+        if (ret < 0) {
+#if (LOG_MODBUS == pdON)
+            printf("modbus err[%d] WAIT response "CMD_TERMINATOR, ret);
+#endif
+            control.stsCom = modbus_MasterReadException();
+            // modbusILLEGAL_FUNCTION: O multimetro recebeu uma funï¿½ï¿½o que nï¿½o foi implementada ou nï¿½o foi habilitada.
+            // modbusILLEGAL_DATA_ADDRESS: O multimetro precisou acessar um endereï¿½o inexistente.
+            // modbusILLEGAL_DATA_VALUE: O valor contido no campo de dado nï¿½o ï¿½ permitido pelo multimetro. Isto indica uma falta de informaï¿½ï¿½es na estrutura do campo de dados.
+            // modbusSLAVE_DEVICE_FAILURE: Um irrecuperï¿½vel erro ocorreu enquanto o multimetro estava tentando executar a aï¿½ï¿½o solicitada.
+            continue;
+        }
 
-		control.stsCom = 5; // sinaliza que a conexão foi feita com sucesso
+        control.stsCom = 5; // sinaliza que a conexï¿½o foi feita com sucesso
 
-		// ATUALIZA VARS QUANDO A COMUNICAÇÃO FOI FEITA COM SUCESSO
-		// -----------------------------------------------------------------------------------------------------------------
+        // ATUALIZA VARS QUANDO A COMUNICAï¿½ï¿½O FOI FEITA COM SUCESSO
+        // -----------------------------------------------------------------------------------------------------------------
 
-		// Comando para ler os registradores: modelo e versão firmware do RH
-		if (cmd == cmdSET_SLOT) {
-			printf("Slot %i"CMD_TERMINATOR, control.slot);
-			control.setSlot =0;
+        // Comando para ler os registradores: modelo e versï¿½o firmware do RH
+        if (cmd == cmdSET_SLOT) {
+            printf("Slot %i"CMD_TERMINATOR, control.slot);
+            control.setSlot = 0;
 
-		} else if (cmd == cmdGET_INFO) {
-			#if (LOG_MODBUS == pdON)
-			printf("model %c%c%c%c"CMD_TERMINATOR, (regs[0] & 0xff), (regs[0] >> 8), (regs[1] & 0xff), (regs[1] >> 8));
-			printf("firware %c.%c"CMD_TERMINATOR, (regs[2] & 0xff), (regs[2] >> 8));
-			#endif
-			control.rhModel[0] = (regs[0] & 0xff);
-			control.rhModel[1] = (regs[0] >> 8);
-			control.rhModel[2] = (regs[1] & 0xff);
-			control.rhModel[3] = (regs[1] >> 8);
-			control.rhModel[4] = 0;
-			control.rhFirmware[0] = (regs[2] & 0xff);
-			control.rhFirmware[1] = (regs[2] >> 8);
-			control.rhFirmware[2] = 0;
+        } else if (cmd == cmdGET_INFO) {
+#if (LOG_MODBUS == pdON)
+            printf("model %c%c%c%c"CMD_TERMINATOR, (regs[0] & 0xff), (regs[0] >> 8), (regs[1] & 0xff), (regs[1] >> 8));
+            printf("firware %c.%c"CMD_TERMINATOR, (regs[2] & 0xff), (regs[2] >> 8));
+#endif
+            control.rhModel[0] = (regs[0] & 0xff);
+            control.rhModel[1] = (regs[0] >> 8);
+            control.rhModel[2] = (regs[1] & 0xff);
+            control.rhModel[3] = (regs[1] >> 8);
+            control.rhModel[4] = 0;
+            control.rhFirmware[0] = (regs[2] & 0xff);
+            control.rhFirmware[1] = (regs[2] >> 8);
+            control.rhFirmware[2] = 0;
 
-			control.getInfo = 0; // sinalizo para não pegar mais informações
+            control.getInfo = 0; // sinalizo para nï¿½o pegar mais informaï¿½ï¿½es
 
-		// comando para ajuste dos reles, vamos sinalizar para não enviar mais comandos
-		} else if (cmd == cmdGET_ACTION) {
-			control.action = regs[0];
-			control.getAction = 0; // sinalizo para não pegar mais ação
+            // comando para ajuste dos reles, vamos sinalizar para nï¿½o enviar mais comandos
+        } else if (cmd == cmdGET_ACTION) {
+            control.action = regs[0];
+            control.getAction = 0; // sinalizo para nï¿½o pegar mais aï¿½ï¿½o
 
-			// Comando para o status do experimento
-		} else if (cmd == cmdGET_SLOT) {
-			control.slot = regs[0];
-     		control.getSlot =0;
-			printf("Slot %i "CMD_TERMINATOR,regs[0]);
-		} 
+            // Comando para o status do experimento
+        } else if (cmd == cmdGET_SLOT) {
+            control.slot = regs[0];
+            control.getSlot = 0;
+            printf("Slot %i "CMD_TERMINATOR, regs[0]);
+        }
     }
-   printf("Saindo da thread\n");
-   uart_Close();
-   return NULL;
-   
+    printf("Saindo da thread\n");
+    uart_Close();
+    return NULL;
+
 }
 
-
-
-
-
 NAN_METHOD(Update) {
-	NanScope();
+    NanScope();
     if (args.Length() < 1) {
-		NanThrowTypeError("Wrong number of arguments");
-		NanReturnUndefined();
-	}
+        NanThrowTypeError("Wrong number of arguments");
+        NanReturnUndefined();
+    }
 
-	if (!args[0]->IsNumber()) {
-		NanThrowTypeError("Wrong arguments");
-		NanReturnUndefined();
-		
-	}
-	control.slot = args[0]->NumberValue();
-	control.setSlot = 1;
-	while(control.setSlot){
-		usleep(SLEEP_TIME);
-	}
-    NanReturnValue(NanNew(1));	
+    if (!args[0]->IsNumber()) {
+        NanThrowTypeError("Wrong arguments");
+        NanReturnUndefined();
+
+    }
+    control.slot = args[0]->NumberValue();
+    control.setSlot = 1;
+    int timeout = TIMEOUT;
+    while (control.setSlot) {
+        usleep(SLEEP_TIME);
+        timeout--;
+        if (timeout < 0) {
+            control.setSlot = 0;
+            NanThrowError("In function setSlot: Modbus Timeout");
+        }
+    }
+    NanReturnValue(NanNew(1));
 
 }
 
 NAN_METHOD(GetSlot) {
-	NanScope();
-	control.getSlot = 1;
-	while(control.getSlot){
-		usleep(SLEEP_TIME);
-	}
-    NanReturnValue(NanNew(control.slot));	
+    NanScope();
+    control.getSlot = 1;
+    int timeout = TIMEOUT;
+    while (control.getSlot) {
+        usleep(SLEEP_TIME);
+        timeout--;
+        if (timeout < 0) {
+            control.getSlot = 0;
+            NanThrowError("In function setSlot: Modbus Timeout");
+        }
+    }
+    NanReturnValue(NanNew(control.slot));
 
 }
 
+NAN_METHOD(Setup) {
+    NanScope();
+    FILE *flog = fopen("msip.log", "w");
+
+    if (modbus_Init() == pdFAIL) {
+        fprintf(flog, "Erro ao abrir a porta UART"CMD_TERMINATOR);
+        fprintf(flog, "Verifique se essa porta nï¿½o esteja sendo usada por outro programa,"CMD_TERMINATOR);
+        fprintf(flog, "ou se o usuï¿½rio tem permissï¿½o para usar essa porta: chmod a+rw %s"CMD_TERMINATOR, COM_PORT);
+        NanReturnValue(NanNew("0"));
+
+    }
+
+    fclose(flog);
+
+    NanReturnValue(NanNew("1"));
+
+}
+
+/*
+NAN_METHOD(Run) {
+    NanScope();
+
+    init_control_tad();
+
+    if (modbus_Init() == pdFAIL) {
+        NanReturnValue(NanNew(0));
+    }
+
+    int rthr = pthread_create(&id_thread, NULL, modbus_Process, (void *) 0); // fica funcionando atï¿½ que receba um comando via WEB para sair		
+    if (rthr) {
+        NanReturnValue(NanNew(0));
+    }
+
+    NanReturnValue(NanNew(1));
+}*/
 
 NAN_METHOD(Run) {
-	NanScope();
-	if (args.Length() < 1) {
-		init_control_tad();
-	}
-	
-     if (modbus_Init() == pdFAIL) {
-		NanReturnValue(NanNew(0));
-     }
-		
-     int rthr = pthread_create(&id_thread, NULL, modbus_Process, (void *) 0); // fica funcionando até que receba um comando via WEB para sair		
-		if(rthr){
-			NanReturnValue(NanNew(0));
-	    }
-		
-	NanReturnValue(NanNew(1));
-}
+    NanScope();
 
+    init_control_tad();
+
+    int rthr = pthread_create(&id_thread, NULL, modbus_Process, (void *) 0); // fica funcionando atï¿½ que receba um comando via WEB para sair		
+    if (rthr) {
+        printf("Unable to create thread void * modbus_Process");
+
+    }
+
+    NanReturnValue(NanNew("1"));
+
+}
 
 NAN_METHOD(Exit) {
-	NanScope();
-	control.exit =1;	
-	NanReturnValue(NanNew(1));
-
+    NanScope();
+    control.exit = 1;
+    NanReturnValue(NanNew(1));
 }
 
+void Init(Handle<Object> exports) { // cria funï¿½ï¿½es para serem invocadas na aplicaï¿½ï¿½o em nodejs
+    exports->Set(NanNew("run"), NanNew<FunctionTemplate>(Run)->GetFunction());
+    exports->Set(NanNew("setup"), NanNew<FunctionTemplate>(Setup)->GetFunction());
 
-void Init(Handle<Object> exports) { // cria funções para serem invocadas na aplicação em nodejs
-	exports->Set(NanNew("run"), NanNew<FunctionTemplate>(Run)->GetFunction());
-	exports->Set(NanNew("update"), NanNew<FunctionTemplate>(Update)->GetFunction());
-	exports->Set(NanNew("exit"), NanNew<FunctionTemplate>(Exit)->GetFunction());
-	exports->Set(NanNew("getslot"), NanNew<FunctionTemplate>(GetSlot)->GetFunction());
+    exports->Set(NanNew("update"), NanNew<FunctionTemplate>(Update)->GetFunction());
+    exports->Set(NanNew("exit"), NanNew<FunctionTemplate>(Exit)->GetFunction());
+    exports->Set(NanNew("getslot"), NanNew<FunctionTemplate>(GetSlot)->GetFunction());
 }
 
 
